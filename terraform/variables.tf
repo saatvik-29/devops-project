@@ -71,3 +71,9 @@ variable "public_subnet_cidr" {
   default     = "10.0.1.0/24"
 }
 
+variable "ami_id" {
+  description = "AMI ID to use for EC2 instance (optional - will auto-detect if not provided)"
+  type        = string
+  default     = ""
+}
+
