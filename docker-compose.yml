@@ -1,0 +1,22 @@
+# docker-compose.yml
+
+version: '3'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    environment:
+      - REACT_APP_WEBSOCKET_URL=${WEBSOCKET_URL:-ws://localhost:8181}
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8181:8181"
+    restart: unless-stopped
