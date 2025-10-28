@@ -209,19 +209,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
                             def instanceIp = env.INSTANCE_IP ?: "184.72.223.51"
                             def instanceId = "i-0a122aa54a4bf4c71"  // From your successful deployment
                             
-                            // Try to get from Terraform output first
-                            try {
-                                instanceIp = bat(
-                                    script: 'cd terraform && terraform output -raw instance_ip',
-                                    returnStdout: true
-                                ).trim()
-                                
-                                instanceId = bat(
-                                    script: 'cd terraform && terraform output -raw instance_id',
-                                    returnStdout: true
-                                ).trim()
-                            } catch (Exception e) {
-                                echo "Could not get Terraform outputs, using known values: ${e.message}"
+                            // Get from Terraform output in terraform directory
+                            dir('terraform') {
+                                try {
+                                    instanceIp = bat(
+                                        script: 'terraform output -raw instance_ip',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    instanceId = bat(
+                                        script: 'terraform output -raw instance_id',
+                                        returnStdout: true
+                                    ).trim()
+                                } catch (Exception e) {
+                                    echo "Could not get Terraform outputs, using known values: ${e.message}"
+                                }
                             }
 
                             env.INSTANCE_IP = instanceIp
@@ -230,12 +232,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
                             echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
 
                             bat """
-set INSTANCE_ID=${instanceId}
-set INSTANCE_IP=${instanceIp}
 set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key%
 set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key%
-echo Deploying to instance %INSTANCE_ID% at %INSTANCE_IP%
-aws ssm send-command --instance-ids %INSTANCE_ID% --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu/Chess || (git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess && cd /home/ubuntu/Chess)','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','echo Deployment completed successfully']" --region %AWS_DEFAULT_REGION%
+echo Deploying to instance ${instanceId} at IP ${instanceIp}
+aws ssm send-command --instance-ids ${instanceId} --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu/Chess || (git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess && cd /home/ubuntu/Chess)','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','echo Deployment completed successfully']" --region %AWS_DEFAULT_REGION%
 echo Deployment command sent successfully
 """
                         }
