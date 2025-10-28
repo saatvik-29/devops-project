@@ -23,41 +23,20 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
-# Try to get latest Ubuntu AMI, fallback to known working AMI
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-20.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
-
-# Fallback AMI mapping for different regions (Ubuntu 20.04 LTS)
+# AMI mapping for different regions (Updated with working Ubuntu AMI)
 locals {
-  fallback_ami_map = {
-    us-east-1    = "ami-0c02fb55956c7d316"  # Ubuntu 20.04 LTS
-    us-east-2    = "ami-0f924dc71d44d23e2"  # Ubuntu 20.04 LTS  
-    us-west-1    = "ami-0d382e80be7ffdae5"  # Ubuntu 20.04 LTS
-    us-west-2    = "ami-03d5c68bab01f3496"  # Ubuntu 20.04 LTS
-    eu-west-1    = "ami-0a8e758f5e873d1c1"  # Ubuntu 20.04 LTS
-    eu-central-1 = "ami-05f7491af5eef733a"  # Ubuntu 20.04 LTS
-    ap-south-1   = "ami-0c1a7f89451184c8b"  # Ubuntu 20.04 LTS
+  ami_map = {
+    us-east-1    = "ami-001dd4635f9fa96b0"  # Ubuntu (your working AMI)
+    us-east-2    = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
+    us-west-1    = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
+    us-west-2    = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
+    eu-west-1    = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
+    eu-central-1 = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
+    ap-south-1   = "ami-001dd4635f9fa96b0"  # Ubuntu (fallback to your AMI)
   }
   
-  # Use provided AMI ID, or data source AMI if available, otherwise fallback to known working AMI
-  ami_id = var.ami_id != "" ? var.ami_id : try(data.aws_ami.ubuntu.id, lookup(local.fallback_ami_map, var.region, "ami-0c02fb55956c7d316"))
+  # Use provided AMI ID, otherwise use your working AMI
+  ami_id = var.ami_id != "" ? var.ami_id : lookup(local.ami_map, var.region, "ami-001dd4635f9fa96b0")
 }
 
 # VPC Configuration
