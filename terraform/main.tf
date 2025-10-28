@@ -23,15 +23,92 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
-# Using specific Ubuntu AMI ID
+# Data source to get the latest Ubuntu AMI
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
 locals {
-  ami_id = "ami-0036347a8a8be83f1"
+  ami_id = data.aws_ami.ubuntu.id
+}
+
+# VPC Configuration
+resource "aws_vpc" "chess_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name        = "chess-${var.environment}-vpc"
+    Environment = var.environment
+  }
+}
+
+# Internet Gateway
+resource "aws_internet_gateway" "chess_igw" {
+  vpc_id = aws_vpc.chess_vpc.id
+
+  tags = {
+    Name        = "chess-${var.environment}-igw"
+    Environment = var.environment
+  }
+}
+
+# Public Subnet
+resource "aws_subnet" "chess_public_subnet" {
+  vpc_id                  = aws_vpc.chess_vpc.id
+  cidr_block              = var.public_subnet_cidr
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name        = "chess-${var.environment}-public-subnet"
+    Environment = var.environment
+  }
+}
+
+# Route Table
+resource "aws_route_table" "chess_public_rt" {
+  vpc_id = aws_vpc.chess_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.chess_igw.id
+  }
+
+  tags = {
+    Name        = "chess-${var.environment}-public-rt"
+    Environment = var.environment
+  }
+}
+
+# Route Table Association
+resource "aws_route_table_association" "chess_public_rta" {
+  subnet_id      = aws_subnet.chess_public_subnet.id
+  route_table_id = aws_route_table.chess_public_rt.id
+}
+
+# Data source for availability zones
+data "aws_availability_zones" "available" {
+  state = "available"
 }
 
 # Security Group for Chess Application
 resource "aws_security_group" "chess_sg" {
   name_prefix = "chess-${var.environment}-${random_id.suffix.hex}-"
   description = "Security group for Chess application"
+  vpc_id      = aws_vpc.chess_vpc.id
 
   # SSH access
   ingress {
@@ -117,6 +194,7 @@ resource "aws_iam_instance_profile" "chess_instance_profile" {
 resource "aws_instance" "chess_app" {
   ami                    = local.ami_id
   instance_type          = var.instance_type
+  subnet_id              = aws_subnet.chess_public_subnet.id
   vpc_security_group_ids = [aws_security_group.chess_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.chess_instance_profile.name
 
@@ -156,7 +234,7 @@ resource "aws_instance" "chess_app" {
 
     # Clone Chess app repository
     echo "Cloning Chess app repository..." >> $LOGFILE 2>&1
-    git clone https://github.com/adnanxali/chess-devops.git /home/ubuntu/Chess >> $LOGFILE 2>&1
+    git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess >> $LOGFILE 2>&1
     cd /home/ubuntu/Chess
 
     # Build and start Chess app

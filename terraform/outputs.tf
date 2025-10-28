@@ -27,3 +27,13 @@ output "backend_websocket_url" {
   description = "Backend WebSocket URL"
   value       = "ws://${aws_eip.chess_eip.public_ip}:8181"
 }
+
+output "vpc_id" {
+  description = "ID of the VPC"
+  value       = aws_vpc.chess_vpc.id
+}
+
+output "subnet_id" {
+  description = "ID of the public subnet"
+  value       = aws_subnet.chess_public_subnet.id
+}

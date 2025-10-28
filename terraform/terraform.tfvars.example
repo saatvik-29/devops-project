@@ -11,7 +11,7 @@ instance_type = "t2.micro"
 volume_size   = 20
 
 # Git Configuration
-git_repo = "https://github.com/akshatsri47/Chess.git"
+git_repo = "https://github.com/saatvik-29/devops-project.git"
 branch   = "main"
 
 # Note: No SSH key required - using AWS Systems Manager for deployment

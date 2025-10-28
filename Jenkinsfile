@@ -7,8 +7,9 @@ pipeline {
     }
 
     environment {
-        AWS_DEFAULT_REGION = 'us-east-1'
-        TF_VAR_region = 'us-east-1'
+        AWS_DEFAULT_REGION = "${params.AWS_REGION ?: 'us-east-1'}"
+        TF_VAR_region = "${params.AWS_REGION ?: 'us-east-1'}"
+        TF_VAR_environment = "${params.ENVIRONMENT ?: 'dev'}"
         TF_VAR_aws_access_key = credentials('aws-access-key')
         TF_VAR_aws_secret_key = credentials('aws-secret-key')
         // WEBSOCKET_URL will be dynamically set after instance is ready
@@ -24,6 +25,11 @@ pipeline {
             name: 'ENVIRONMENT',
             choices: ['dev', 'staging', 'prod'],
             description: 'Choose environment'
+        )
+        choice(
+            name: 'AWS_REGION',
+            choices: ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-south-1'],
+            description: 'Choose AWS region'
         )
         booleanParam(
             name: 'DESTROY_INFRASTRUCTURE',
@@ -106,13 +112,13 @@ pipeline {
                             if (params.DESTROY_INFRASTRUCTURE) {
                                 bat '''
                                     terraform init -reconfigure
-                                    terraform plan -destroy -var="environment=%AUTO_ENVIRONMENT%" -out=destroy.tfplan
+                                    terraform plan -destroy -out=destroy.tfplan
                                 '''
                             } else {
                                 bat '''
                                     terraform init -reconfigure
-                                    terraform refresh -var="environment=%AUTO_ENVIRONMENT%" || echo "Refresh failed, continuing..."
-                                    terraform plan -var="environment=%AUTO_ENVIRONMENT%" -out=tfplan
+                                    terraform refresh || echo "Refresh failed, continuing..."
+                                    terraform plan -out=tfplan
                                 '''
                             }
                         }
