@@ -201,48 +201,68 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
         }
 
         stage('Deploy Application') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    script {
-                        if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
-                            // Get instance details from Terraform output
-                            def instanceIp = env.INSTANCE_IP ?: "184.72.223.51"
-                            def instanceId = "i-0a122aa54a4bf4c71"  // From your successful deployment
-                            
-                            // Get from Terraform output in terraform directory
-                            dir('terraform') {
-                                try {
-                                    instanceIp = bat(
-                                        script: 'terraform output -raw instance_ip',
-                                        returnStdout: true
-                                    ).trim()
-                                    
-                                    instanceId = bat(
-                                        script: 'terraform output -raw instance_id',
-                                        returnStdout: true
-                                    ).trim()
-                                } catch (Exception e) {
-                                    echo "Could not get Terraform outputs, using known values: ${e.message}"
-                                }
-                            }
+    steps {
+        timeout(time: 5, unit: 'MINUTES') {
+            script {
+                if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
+                    dir('terraform') {
+                        def instanceIp = ""
+                        def instanceId = ""
+                        try {
+                            instanceIp = bat(
+                                script: 'terraform output -raw instance_ip',
+                                returnStdout: true
+                            ).trim()
 
-                            env.INSTANCE_IP = instanceIp
-                            env.INSTANCE_ID = instanceId
-
-                            echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
-
-                            bat """
-set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key%
-set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key%
-echo Deploying to instance ${instanceId} at IP ${instanceIp}
-aws ssm send-command --instance-ids ${instanceId} --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu/Chess || (git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess && cd /home/ubuntu/Chess)','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','echo Deployment completed successfully']" --region %AWS_DEFAULT_REGION%
-echo Deployment command sent successfully
-"""
+                            instanceId = bat(
+                                script: 'terraform output -raw instance_id',
+                                returnStdout: true
+                            ).trim()
+                        } catch (Exception e) {
+                            echo "⚠️ Failed to read Terraform outputs: ${e.message}"
+                            instanceIp = "184.72.223.51"
+                            instanceId = "i-0a122aa54a4bf4c71"
                         }
+
+                        env.INSTANCE_IP = instanceIp
+                        env.INSTANCE_ID = instanceId
+
+                        echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
+
+                        // Batch-safe commands (use ^ for line continuation)
+                        bat """
+@echo off
+setlocal enabledelayedexpansion
+set AWS_ACCESS_KEY_ID=${env.TF_VAR_aws_access_key}
+set AWS_SECRET_ACCESS_KEY=${env.TF_VAR_aws_secret_key}
+echo.
+echo === Starting AWS SSM Deployment ===
+echo Instance ID: ${instanceId}
+echo Instance IP: ${instanceIp}
+echo Region: %AWS_DEFAULT_REGION%
+echo.
+
+aws ssm send-command ^
+    --instance-ids ${instanceId} ^
+    --document-name "AWS-RunShellScript" ^
+    --parameters "commands=['cd /home/ubuntu/Chess || (git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess && cd /home/ubuntu/Chess)','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','echo Deployment completed successfully']" ^
+    --region %AWS_DEFAULT_REGION%
+
+if %errorlevel% neq 0 (
+    echo ❌ Deployment command failed!
+    exit /b 1
+) else (
+    echo ✅ Deployment command sent successfully
+)
+endlocal
+"""
                     }
                 }
             }
         }
+    }
+}
+
 
         stage('Health Check') {
             steps {
