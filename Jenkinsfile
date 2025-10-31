@@ -245,22 +245,32 @@ echo Backend: ws://${instanceIp}:8181
             steps {
                 script {
                     if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
-                        def instanceIp = env.INSTANCE_IP ?: "184.72.223.51"
+                        def instanceIp = env.INSTANCE_IP ?: ""
+                        
+                        dir('terraform') {
+                            try {
+                                instanceIp = bat(
+                                    script: 'terraform output -raw instance_ip',
+                                    returnStdout: true
+                                ).trim()
+                            } catch (Exception e) {
+                                echo "Could not get instance IP for health check"
+                            }
+                        }
 
-                        echo "Performing basic health checks on instance ${instanceIp}"
-                        echo "Note: Application may take 5-10 minutes to fully start after deployment"
+                        if (instanceIp) {
+                            echo "Performing basic health checks on instance ${instanceIp}"
+                            echo "Note: Application may take 5-10 minutes to fully start after deployment"
 
-                        bat """
+                            bat """
 echo Checking instance connectivity...
 ping -n 1 ${instanceIp} || echo "Instance ping failed"
-
-echo Checking if ports will be accessible (may take time)...
-powershell -Command "try { \$tcp = New-Object System.Net.Sockets.TcpClient; \$tcp.Connect('${instanceIp}', 22); \$tcp.Close(); Write-Host 'SSH port 22 is accessible' } catch { Write-Host 'SSH port not yet accessible' }"
 
 echo Health check completed. Application deployment is in progress.
 echo Frontend will be available at: http://${instanceIp}:5173
 echo Backend will be available at: ws://${instanceIp}:8181
 """
+                        }
                     }
                 }
             }
