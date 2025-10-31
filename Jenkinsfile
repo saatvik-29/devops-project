@@ -231,31 +231,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
 
                         // Batch-safe commands (use ^ for line continuation)
                         bat """
-@echo off
-setlocal enabledelayedexpansion
-set AWS_ACCESS_KEY_ID=${env.TF_VAR_aws_access_key}
-set AWS_SECRET_ACCESS_KEY=${env.TF_VAR_aws_secret_key}
-echo.
 echo === Starting AWS SSM Deployment ===
-echo Instance ID: ${instanceId}
-echo Instance IP: ${instanceIp}
-echo Region: %AWS_DEFAULT_REGION%
-echo.
+echo Instance ID: ${instance_id}
+echo IP: ${instance_ip}
+echo Region: ${env.AWS_REGION}
 
 aws ssm send-command ^
-    --instance-ids ${instanceId} ^
-    --document-name "AWS-RunShellScript" ^
-    --parameters "commands=['cd /home/ubuntu/Chess || (git clone https://github.com/saatvik-29/devops-project.git /home/ubuntu/Chess && cd /home/ubuntu/Chess)','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','echo Deployment completed successfully']" ^
-    --region %AWS_DEFAULT_REGION%
-
-if %errorlevel% neq 0 (
-    echo ❌ Deployment command failed!
-    exit /b 1
-) else (
-    echo ✅ Deployment command sent successfully
-)
-endlocal
+  --instance-ids ${instance_id} ^
+  --document-name "DeployApp" ^
+  --comment "Deploying app via Jenkins" ^
+  --region ${env.AWS_REGION}
 """
+
                     }
                 }
             }
