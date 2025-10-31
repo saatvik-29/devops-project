@@ -201,41 +201,44 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
         }
 
         stage('Deploy Application') {
-    timeout(time: 5, unit: 'MINUTES') {
-        script {
-            dir('terraform') {
-                echo "=== Starting AWS SSM Deployment ==="
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    script {
+                        if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
+                            // Get instance details dynamically from Terraform
+                            def instanceIp = ""
+                            def instanceId = ""
+                            
+                            dir('terraform') {
+                                instanceIp = bat(
+                                    script: 'terraform output -raw instance_ip',
+                                    returnStdout: true
+                                ).trim()
+                                
+                                instanceId = bat(
+                                    script: 'terraform output -raw instance_id',
+                                    returnStdout: true
+                                ).trim()
+                            }
 
-                // Capture Terraform outputs correctly
-                def instance_id = bat(
-                    script: 'terraform output -raw instance_id',
-                    returnStdout: true
-                ).trim()
-                def instance_ip = bat(
-                    script: 'terraform output -raw instance_ip',
-                    returnStdout: true
-                ).trim()
+                            echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
 
-                echo "Instance ID: ${instance_id}"
-                echo "Instance IP: ${instance_ip}"
-                echo "Region: ${env.AWS_REGION}"
+                            bat """
+set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key%
+set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key%
 
-                // Run the actual AWS CLI command
-                def deployCmd = """
-                aws ssm send-command ^
-                    --instance-ids ${instance_id} ^
-                    --document-name "AWS-RunShellScript" ^
-                    --comment "Deploying app via Jenkins" ^
-                    --parameters "commands=['cd /home/ec2-user/app && docker-compose up -d']" ^
-                    --region ${env.AWS_REGION}
-                """
+aws ssm send-command --instance-ids ${instanceId} --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu','if [ ! -d Chess ]; then git clone https://github.com/saatvik-29/devops-project.git Chess; fi','cd Chess','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','sudo docker-compose ps']" --region %AWS_DEFAULT_REGION%
 
-                bat(label: 'Deploying via AWS SSM', script: deployCmd)
+echo Deployment command sent to instance ${instanceId}
+echo Frontend: http://${instanceIp}:5173
+echo Backend: ws://${instanceIp}:8181
+"""
+                        }
+                    }
+                }
             }
         }
-    }
 }
-
 
 
         stage('Health Check') {
