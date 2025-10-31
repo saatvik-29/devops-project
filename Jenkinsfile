@@ -220,17 +220,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
                                 ).trim()
                             }
 
+                            // Clean up any extra output
+                            instanceIp = instanceIp.replaceAll(/[^0-9.]/, '')
+                            instanceId = instanceId.replaceAll(/[^a-z0-9-]/, '')
+
                             echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
 
+                            // Use bat with proper variable substitution
                             bat """
+@echo off
 set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key%
 set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key%
+set INSTANCE_ID=${instanceId}
+set INSTANCE_IP=${instanceIp}
 
-aws ssm send-command --instance-ids ${instanceId} --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu','if [ ! -d Chess ]; then git clone https://github.com/saatvik-29/devops-project.git Chess; fi','cd Chess','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','sudo docker-compose ps']" --region %AWS_DEFAULT_REGION%
+aws ssm send-command --instance-ids %INSTANCE_ID% --document-name "AWS-RunShellScript" --parameters "commands=['cd /home/ubuntu','if [ ! -d Chess ]; then git clone https://github.com/saatvik-29/devops-project.git Chess; fi','cd Chess','git fetch origin','git reset --hard origin/main','sudo docker-compose down || echo No containers running','sudo docker system prune -f','sudo docker-compose build --no-cache','sudo docker-compose up -d --force-recreate','sudo docker-compose ps']" --region %AWS_DEFAULT_REGION%
 
-echo Deployment command sent to instance ${instanceId}
-echo Frontend: http://${instanceIp}:5173
-echo Backend: ws://${instanceIp}:8181
+echo Deployment command sent to instance %INSTANCE_ID%
+echo Frontend: http://%INSTANCE_IP%:5173
+echo Backend: ws://%INSTANCE_IP%:8181
 """
                         }
                     }
@@ -250,6 +258,8 @@ echo Backend: ws://${instanceIp}:8181
                                     script: 'terraform output -raw instance_ip',
                                     returnStdout: true
                                 ).trim()
+                                // Clean up the IP
+                                instanceIp = instanceIp.replaceAll(/[^0-9.]/, '')
                             } catch (Exception e) {
                                 echo "Could not get instance IP for health check"
                             }
@@ -260,12 +270,14 @@ echo Backend: ws://${instanceIp}:8181
                             echo "Note: Application may take 5-10 minutes to fully start after deployment"
 
                             bat """
+@echo off
+set INSTANCE_IP=${instanceIp}
 echo Checking instance connectivity...
-ping -n 1 ${instanceIp} || echo "Instance ping failed"
+ping -n 1 %INSTANCE_IP% || echo "Instance ping failed"
 
 echo Health check completed. Application deployment is in progress.
-echo Frontend will be available at: http://${instanceIp}:5173
-echo Backend will be available at: ws://${instanceIp}:8181
+echo Frontend will be available at: http://%INSTANCE_IP%:5173
+echo Backend will be available at: ws://%INSTANCE_IP%:8181
 """
                         }
                     }
