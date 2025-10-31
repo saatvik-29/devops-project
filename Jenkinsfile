@@ -201,54 +201,41 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
         }
 
         stage('Deploy Application') {
-    steps {
-        timeout(time: 5, unit: 'MINUTES') {
-            script {
-                if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
-                    dir('terraform') {
-                        def instanceIp = ""
-                        def instanceId = ""
-                        try {
-                            instanceIp = bat(
-                                script: 'terraform output -raw instance_ip',
-                                returnStdout: true
-                            ).trim()
+    timeout(time: 5, unit: 'MINUTES') {
+        script {
+            dir('terraform') {
+                echo "=== Starting AWS SSM Deployment ==="
 
-                            instanceId = bat(
-                                script: 'terraform output -raw instance_id',
-                                returnStdout: true
-                            ).trim()
-                        } catch (Exception e) {
-                            echo "⚠️ Failed to read Terraform outputs: ${e.message}"
-                            instanceIp = "184.72.223.51"
-                            instanceId = "i-0a122aa54a4bf4c71"
-                        }
+                // Capture Terraform outputs correctly
+                def instance_id = bat(
+                    script: 'terraform output -raw instance_id',
+                    returnStdout: true
+                ).trim()
+                def instance_ip = bat(
+                    script: 'terraform output -raw instance_ip',
+                    returnStdout: true
+                ).trim()
 
-                        env.INSTANCE_IP = instanceIp
-                        env.INSTANCE_ID = instanceId
+                echo "Instance ID: ${instance_id}"
+                echo "Instance IP: ${instance_ip}"
+                echo "Region: ${env.AWS_REGION}"
 
-                        echo "Deploying to instance ${instanceId} at IP ${instanceIp}"
+                // Run the actual AWS CLI command
+                def deployCmd = """
+                aws ssm send-command ^
+                    --instance-ids ${instance_id} ^
+                    --document-name "AWS-RunShellScript" ^
+                    --comment "Deploying app via Jenkins" ^
+                    --parameters "commands=['cd /home/ec2-user/app && docker-compose up -d']" ^
+                    --region ${env.AWS_REGION}
+                """
 
-                        // Batch-safe commands (use ^ for line continuation)
-                        bat """
-echo === Starting AWS SSM Deployment ===
-echo Instance ID: ${instance_id}
-echo IP: ${instance_ip}
-echo Region: ${env.AWS_REGION}
-
-aws ssm send-command ^
-  --instance-ids ${instance_id} ^
-  --document-name "DeployApp" ^
-  --comment "Deploying app via Jenkins" ^
-  --region ${env.AWS_REGION}
-"""
-
-                    }
-                }
+                bat(label: 'Deploying via AWS SSM', script: deployCmd)
             }
         }
     }
 }
+
 
 
         stage('Health Check') {
