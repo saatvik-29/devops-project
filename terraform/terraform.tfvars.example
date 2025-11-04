@@ -1,0 +1,17 @@
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_access_key = "your-aws-access-key"
+aws_secret_key = "your-aws-secret-key"
+region        = "us-east-1"
+
+# Environment Configuration
+environment   = "dev"  # dev, staging, or prod
+instance_type = "t2.micro"
+volume_size   = 20
+
+# Git Configuration
+git_repo = "https://github.com/akshatsri47/Chess.git"
+branch   = "main"
+
+# Note: No SSH key required - using AWS Systems Manager for deployment
