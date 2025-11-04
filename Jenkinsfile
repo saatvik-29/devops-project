@@ -200,30 +200,58 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
                 timeout(time: 5, unit: 'MINUTES') {
                     script {
                         if ((env.AUTO_DEPLOYMENT_TYPE == 'application-only' || env.AUTO_DEPLOYMENT_TYPE == 'full-deployment') && env.AUTO_DESTROY != 'true') {
-                            // Use known values for application-only deployment
-                            def instanceIp = env.INSTANCE_IP ?: "98.84.103.108"
-                            def instanceId = env.INSTANCE_ID ?: "i-068622b523591b3c0"
+                            // Get instance details dynamically from Terraform or AWS
+                            def instanceIp = ""
+                            def instanceId = ""
                             
-                            // Try to get from AWS CLI dynamically
-                            try {
-                                def awsInstanceId = bat(
-                                    script: 'set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key% && set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key% && aws ec2 describe-instances --filters "Name=tag:Application,Values=chess" "Name=tag:Environment,Values=%AUTO_ENVIRONMENT%" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text --region %AWS_DEFAULT_REGION%',
-                                    returnStdout: true
-                                ).trim()
-                                
-                                def awsInstanceIp = bat(
-                                    script: 'set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key% && set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key% && aws ec2 describe-instances --filters "Name=tag:Application,Values=chess" "Name=tag:Environment,Values=%AUTO_ENVIRONMENT%" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text --region %AWS_DEFAULT_REGION%',
-                                    returnStdout: true
-                                ).trim()
-                                
-                                if (awsInstanceId && !awsInstanceId.contains("None") && awsInstanceId.startsWith("i-")) {
-                                    instanceId = awsInstanceId
+                            // First try to get from Terraform outputs
+                            dir('terraform') {
+                                try {
+                                    instanceIp = bat(
+                                        script: 'terraform output -raw instance_ip',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    instanceId = bat(
+                                        script: 'terraform output -raw instance_id',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    echo "Got from Terraform - Instance: ${instanceId}, IP: ${instanceIp}"
+                                } catch (Exception e) {
+                                    echo "Could not get Terraform outputs: ${e.message}"
                                 }
-                                if (awsInstanceIp && !awsInstanceIp.contains("None") && awsInstanceIp.matches(/\d+\.\d+\.\d+\.\d+/)) {
-                                    instanceIp = awsInstanceIp
+                            }
+                            
+                            // If Terraform outputs failed, try AWS CLI
+                            if (!instanceIp || !instanceId) {
+                                try {
+                                    def awsInstanceId = bat(
+                                        script: 'set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key% && set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key% && aws ec2 describe-instances --filters "Name=tag:Application,Values=chess" "Name=tag:Environment,Values=%AUTO_ENVIRONMENT%" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text --region %AWS_DEFAULT_REGION%',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    def awsInstanceIp = bat(
+                                        script: 'set AWS_ACCESS_KEY_ID=%TF_VAR_aws_access_key% && set AWS_SECRET_ACCESS_KEY=%TF_VAR_aws_secret_key% && aws ec2 describe-instances --filters "Name=tag:Application,Values=chess" "Name=tag:Environment,Values=%AUTO_ENVIRONMENT%" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text --region %AWS_DEFAULT_REGION%',
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    if (awsInstanceId && !awsInstanceId.contains("None") && awsInstanceId.startsWith("i-")) {
+                                        instanceId = awsInstanceId
+                                    }
+                                    if (awsInstanceIp && !awsInstanceIp.contains("None") && awsInstanceIp.matches(/\d+\.\d+\.\d+\.\d+/)) {
+                                        instanceIp = awsInstanceIp
+                                    }
+                                    
+                                    echo "Got from AWS CLI - Instance: ${instanceId}, IP: ${instanceIp}"
+                                } catch (Exception e) {
+                                    echo "Could not get AWS instance details: ${e.message}"
                                 }
-                            } catch (Exception e) {
-                                echo "Could not get AWS instance details, using fallback values: ${e.message}"
+                            }
+                            
+                            // Only proceed if we have valid instance details
+                            if (!instanceIp || !instanceId) {
+                                error("Could not determine instance details. Please run 'full-deployment' to create infrastructure first.")
                             }
 
                             env.INSTANCE_IP = instanceIp
