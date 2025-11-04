@@ -207,15 +207,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "\$i=0; while (\$i -lt 10
                             // First try to get from Terraform outputs
                             dir('terraform') {
                                 try {
-                                    instanceIp = bat(
+                                    def rawIp = bat(
                                         script: 'terraform output -raw instance_ip',
                                         returnStdout: true
                                     ).trim()
                                     
-                                    instanceId = bat(
+                                    def rawId = bat(
                                         script: 'terraform output -raw instance_id',
                                         returnStdout: true
                                     ).trim()
+                                    
+                                    // Extract just the IP and ID from the output
+                                    instanceIp = rawIp.split('\n').last().trim()
+                                    instanceId = rawId.split('\n').last().trim()
                                     
                                     echo "Got from Terraform - Instance: ${instanceId}, IP: ${instanceIp}"
                                 } catch (Exception e) {
