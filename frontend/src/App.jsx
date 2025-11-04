@@ -101,7 +101,7 @@ export default function App() {
         <AppBar position="static">
           <Toolbar>
             <Typography variant="h6" component="div">
-              Chess App
+              Chess App new
             </Typography>
             <Button color="inherit" component={Link} to="/">
               Home
