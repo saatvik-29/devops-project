@@ -77,21 +77,27 @@ pipeline {
             steps {
                 script {
                     bat '''
-                        where terraform >nul 2>&1
+                        echo Checking for required tools...
+                        
+                        terraform version >nul 2>&1
                         if %errorlevel% neq 0 (
                             echo Installing Terraform...
-                            powershell -Command "Invoke-WebRequest -Uri 'https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_windows_amd64.zip' -OutFile 'terraform.zip'"
-                            powershell -Command "Expand-Archive -Path 'terraform.zip' -DestinationPath '.' -Force"
-                            move terraform.exe C:\\Windows\\System32\\
-                            del terraform.zip
+                            powershell -Command "try { Invoke-WebRequest -Uri 'https://releases.hashicorp.com/terraform/1.6.0/terraform_1.6.0_windows_amd64.zip' -OutFile 'terraform.zip'; Expand-Archive -Path 'terraform.zip' -DestinationPath '.' -Force; Move-Item terraform.exe C:\\Windows\\System32\\ -Force; Remove-Item terraform.zip -Force } catch { Write-Host 'Terraform installation failed' }"
                         )
 
-                        where aws >nul 2>&1
+                        aws --version >nul 2>&1
                         if %errorlevel% neq 0 (
-                            echo AWS CLI not found. Please install manually from https://awscli.amazonaws.com/AWSCLIV2.msi
-                            echo Attempting to add AWS CLI to PATH...
-                            set PATH=%PATH%;C:\\Program Files\\Amazon\\AWSCLIV2
+                            echo AWS CLI not found in PATH
+                            echo Checking common AWS CLI locations...
+                            if exist "C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe" (
+                                echo Found AWS CLI, adding to PATH
+                                set "PATH=C:\\Program Files\\Amazon\\AWSCLIV2;%PATH%"
+                            ) else (
+                                echo AWS CLI not found. Please ensure it is installed.
+                            )
                         )
+                        
+                        echo Tool check completed
                     '''
                 }
             }
@@ -269,26 +275,36 @@ powershell -Command "for (\$i=0; \$i -lt 5; \$i++) { try { \$tcp = New-Object Sy
     post {
         always {
             script {
+                def instanceIp = env.INSTANCE_IP ?: "N/A"
+                
                 if (!params.DESTROY_INFRASTRUCTURE && (params.DEPLOYMENT_TYPE == 'full-deployment' || params.DEPLOYMENT_TYPE == 'infrastructure-only')) {
-                    def instanceIp = env.INSTANCE_IP ?: bat(
-                        script: 'cd terraform && terraform output -raw instance_ip 2>nul || echo N/A',
-                        returnStdout: true
-                    ).trim()
-                    instanceIp = instanceIp.replaceAll(/.*?(\d+\.\d+\.\d+\.\d+).*/, '$1')
+                    try {
+                        dir('terraform') {
+                            def output = bat(
+                                script: 'terraform output -raw instance_ip 2>nul || echo N/A',
+                                returnStdout: true
+                            ).trim()
+                            if (output && !output.contains("N/A") && !output.contains("Warning")) {
+                                instanceIp = output.replaceAll(/.*?(\d+\.\d+\.\d+\.\d+).*/, '$1')
+                            }
+                        }
+                    } catch (Exception e) {
+                        echo "Could not retrieve Terraform outputs: ${e.message}"
+                    }
+                }
 
-                    echo """
+                echo """
 ========================================
 DEPLOYMENT SUMMARY
 ========================================
-Environment: ${params.ENVIRONMENT}
-Deployment Type: ${params.DEPLOYMENT_TYPE}
+Environment: ${params.ENVIRONMENT ?: env.AUTO_ENVIRONMENT}
+Deployment Type: ${params.DEPLOYMENT_TYPE ?: env.AUTO_DEPLOYMENT_TYPE}
 Instance IP: ${instanceIp}
 Frontend URL: http://${instanceIp}:5173
 Backend WebSocket: ws://${instanceIp}:8181
 Git Commit: ${env.GIT_COMMIT_SHORT}
 ========================================
 """
-                }
             }
         }
         success {
