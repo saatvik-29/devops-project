@@ -8,7 +8,7 @@ const WelcomePage = () => {
   return (
     <Box sx={{ textAlign: 'center', mt: 4 }}>
       <Typography variant="h3" gutterBottom>
-        Welcome to Chess!
+        Welcome to Chesscom!
       </Typography>
       <Button
         variant="contained"
